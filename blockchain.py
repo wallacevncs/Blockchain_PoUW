@@ -1,5 +1,4 @@
 import os
-import shutil
 import re
 import datetime
 import hashlib
@@ -11,9 +10,8 @@ from matching.games import HospitalResident
 
 class Blockchain:
 
-    def __init__(self, path, trash_path):
-        self.path        = path
-        self.trash_path  = trash_path
+    def __init__(self, s3_manager):
+        self.s3_manager  = s3_manager
         self.chain       = []
         self.nodes       = set()
 
@@ -41,27 +39,33 @@ class Blockchain:
             if not year_match:
                 continue
 
-            edition_year  = year_match.group(0)
+            edition_year   = year_match.group(0)
+            residents_file = 'residentsPreferences_{}.json'.format(edition_year)
+            hospitals_file = 'hospitalsPreferences_{}.json'.format(edition_year)
 
             # Compares the last result found between the 2 chains
             if current_block['edition'] == last_block['edition'] and current_block['result'] != last_block['result']:
-                
-                residentsPreferencesFilePath  = '{}/residentsPreferences_{}.json'.format(self.trash_path, edition_year)
-                hospitalsPreferencesFilePath  = '{}/hospitalsPreferences_{}.json'.format(self.trash_path, edition_year)
-                
-                # Returns files to be reprocessed
-                self.move_files(residentsPreferencesFilePath, self.path)
-                self.move_files(hospitalsPreferencesFilePath, self.path)
 
-                # Remove the last block
-                self.chain.pop()
+                residents_file_id  = self.s3_manager.get_file_id(residents_file)
+                hospitals_file_id  = self.s3_manager.get_file_id(hospitals_file)
 
+                # Restores objects to be mined again
+                self.s3_manager.delete_file(residents_file, residents_file_id)
+                self.s3_manager.delete_file(hospitals_file, hospitals_file_id)
+
+                # Remove last block
+                self.chain.pop() 
                 return False
-            
-            files = self.list_files(self.trash_path, edition_year)
-            if not files and i == len(chain) - 1:
-                self.chain.pop()
-                return False
+
+
+            if i == len(chain) - 1:
+                residents_file_id  = self.s3_manager.get_file_id(residents_file)
+                hospitals_file_id  = self.s3_manager.get_file_id(hospitals_file)
+
+                if not residents_file_id or not hospitals_file_id:
+                    self.chain.pop()  # Remove last block
+                    return False
+
 
             if i == 0:
                 continue
@@ -120,17 +124,17 @@ class Blockchain:
 
         resident_prefs = {}
         for item in residentsJson['Preferences']:
-            name = item['Name']
-            preferences = item['Preferences']
-            resident_prefs[name] = preferences
+            name                   = item['Name']
+            preferences            = item['Preferences']
+            resident_prefs[name]   = preferences
 
         hospital_prefs = {}
-        hospitals_cap = {}
+        hospitals_cap  = {}
         for item in hospitalsJson['Hospitals']:
-            program = item['Program']
-            preferences = item['Preferences']
+            program                 = item['Program']
+            preferences             = item['Preferences']
             hospital_prefs[program] = preferences
-            hospitals_cap[program] = item['Capacity']
+            hospitals_cap[program]  = item['Capacity']
 
         game = HospitalResident.create_from_dictionaries(
             resident_prefs, hospital_prefs, hospitals_cap)
@@ -152,39 +156,6 @@ class Blockchain:
         parsed_url = urlparse(address)
         self.nodes.add(parsed_url.netloc)
 
-    def list_files(self, folder_path, year=None):
-        files_by_year = OrderedDict()
-
-        # List all files in the folder
-        files = os.listdir(folder_path)
-
-        year_pattern = re.compile(r'\d{4}')
-
-        for file in files:
-            # Try to find a year in the file name
-            result = year_pattern.search(file)
-
-            if result:
-                file_year = result.group(0)
-
-                if year and file_year != year:
-                    continue
-
-                full_path = os.path.join(folder_path, file)
-
-                if file_year not in files_by_year:
-                    files_by_year[file_year] = []
-
-                # Add to the dictionary with the year as the key and the path as the value
-                files_by_year[file_year].append(full_path)
-
-        files_by_year = OrderedDict(sorted(files_by_year.items(), key=lambda x: x[0], reverse=True))
-
-        return files_by_year
-    
-    def move_files(self, current_path, subdirectory_path):
-        os.makedirs(subdirectory_path, exist_ok=True)
-
-        if os.path.exists(current_path):
-            destination_path = os.path.join(subdirectory_path, os.path.basename(current_path))
-            shutil.move(current_path, destination_path)
+    def delete_file(self, file_path):
+        if os.path.exists(file_path):
+            os.remove(file_path)
