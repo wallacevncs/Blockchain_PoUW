@@ -1,0 +1,6 @@
+{
+    "bucket": "nrmp-input",
+    "recursion_limit": 5000,
+    "address": "localhost",
+    "port": 5001
+}

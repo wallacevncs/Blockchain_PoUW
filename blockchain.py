@@ -4,7 +4,6 @@ import datetime
 import hashlib
 import json
 import requests
-from collections import OrderedDict
 from urllib.parse import urlparse
 from matching.games import HospitalResident
 
@@ -30,7 +29,7 @@ class Blockchain:
             return None
         return self.chain[-1]
 
-    def is_chain_valid(self, chain, block):
+    def is_chain_valid(self, chain):
 
         last_block = self.get_previous_block()
         for i in range(len(chain) - 1, -1, -1):
@@ -50,22 +49,23 @@ class Blockchain:
                 hospitals_file_id  = self.s3_manager.get_file_id(hospitals_file)
 
                 # Restores objects to be mined again
-                self.s3_manager.delete_file(residents_file, residents_file_id)
-                self.s3_manager.delete_file(hospitals_file, hospitals_file_id)
+                if not residents_file_id:
+                    self.s3_manager.delete_file(residents_file, residents_file_id)
+
+                if not hospitals_file_id:
+                    self.s3_manager.delete_file(hospitals_file, hospitals_file_id)
 
                 # Remove last block
                 self.chain.pop() 
                 return False
-
 
             if i == len(chain) - 1:
                 residents_file_id  = self.s3_manager.get_file_id(residents_file)
                 hospitals_file_id  = self.s3_manager.get_file_id(hospitals_file)
 
                 if not residents_file_id or not hospitals_file_id:
-                    self.chain.pop()  # Remove last block
+                    self.chain.pop()
                     return False
-
 
             if i == 0:
                 continue
@@ -99,7 +99,7 @@ class Blockchain:
                 if chain and 'timestamp' in chain[-1]:
                     node_timestamp = datetime.datetime.strptime(chain[-1]['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
 
-                if not self.is_chain_valid(chain, chain[-1]):
+                if not self.is_chain_valid(chain):
                     continue
 
                 if length > max_length:
@@ -114,32 +114,34 @@ class Blockchain:
         
         return False
 
-    def proof_of_work(self, residentsPreferencesFilePath, hospitalsPreferencesFilePath):
+    def proof_of_work(self, residents_file_path, hospitals_file_path):
 
-        with open(residentsPreferencesFilePath, 'r') as file:
-            residentsJson = json.load(file)
+        with open(residents_file_path, 'r') as file:
+            residents_json = json.load(file)
 
-        with open(hospitalsPreferencesFilePath, 'r') as file:
-            hospitalsJson = json.load(file)
+        with open(hospitals_file_path, 'r') as file:
+            hospitals_json = json.load(file)
 
         resident_prefs = {}
-        for item in residentsJson['Preferences']:
+        for item in residents_json['Preferences']:
             name                   = item['Name']
             preferences            = item['Preferences']
             resident_prefs[name]   = preferences
 
         hospital_prefs = {}
         hospitals_cap  = {}
-        for item in hospitalsJson['Hospitals']:
+        for item in hospitals_json['Hospitals']:
             program                 = item['Program']
             preferences             = item['Preferences']
             hospital_prefs[program] = preferences
             hospitals_cap[program]  = item['Capacity']
 
-        game = HospitalResident.create_from_dictionaries(
+        game     = HospitalResident.create_from_dictionaries(
             resident_prefs, hospital_prefs, hospitals_cap)
         
         matching = game.solve()
+        if not game.check_validity() or not game.check_stability():
+            return None
 
         matching_as_dict = {str(key): str(value) for key, value in matching.items()}
 
