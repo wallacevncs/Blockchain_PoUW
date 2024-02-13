@@ -23,6 +23,8 @@ s3_client   = boto3.client(service_name='s3')
 s3Manager   = S3Manager(s3_client , settings['bucket'])
 blockchain  = Blockchain(s3Manager)
 
+port        = int(os.getenv("PORT", 5000))
+
 @app.route('/mine_block', methods=['GET'])
 def mine_block():
     
@@ -118,4 +120,4 @@ def update_chain():
 
     return jsonify(response), 200
 
-app.run(host=settings["address"], port=settings["port"])
+app.run(host='0.0.0.0', port=port)

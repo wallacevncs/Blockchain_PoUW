@@ -6,6 +6,7 @@ import json
 import requests
 from urllib.parse import urlparse
 from matching.games import HospitalResident
+from dateutil import parser
 
 class Blockchain:
 
@@ -83,7 +84,7 @@ class Blockchain:
         current_timestamp   = None
 
         if self.chain and 'timestamp' in self.chain[-1]:
-            current_timestamp = datetime.datetime.strptime(self.chain[-1]['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
+            current_timestamp = parser.parse(self.chain[-1]['timestamp'])
 
         for node in network:
             response   = requests.get(f'http://{node}/get_chain')
@@ -97,7 +98,7 @@ class Blockchain:
 
                 node_timestamp = None
                 if chain and 'timestamp' in chain[-1]:
-                    node_timestamp = datetime.datetime.strptime(chain[-1]['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
+                    node_timestamp = parser.parse(chain[-1]['timestamp'])
 
                 if not self.is_chain_valid(chain):
                     continue
