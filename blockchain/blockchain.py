@@ -44,7 +44,7 @@ class Blockchain:
             hospitals_file = 'hospitalsPreferences_{}.json'.format(edition_year)
 
             # Compares the last result found between the 2 chains
-            if current_block['edition'] == last_block['edition'] and current_block['result'] != last_block['result']:
+            if last_block is not None and current_block['edition'] == last_block['edition'] and current_block['result'] != last_block['result']:
 
                 residents_file_id  = self.s3_manager.get_file_id(residents_file)
                 hospitals_file_id  = self.s3_manager.get_file_id(hospitals_file)
@@ -79,14 +79,15 @@ class Blockchain:
 
     def update_chain(self):
         network             = self.nodes
-        updated_chain       = None
+        updated             = False
         max_length          = len(self.chain)
         current_timestamp   = None
 
-        if self.chain and 'timestamp' in self.chain[-1]:
-            current_timestamp = parser.parse(self.chain[-1]['timestamp'])
-
         for node in network:
+
+            if self.chain and 'timestamp' in self.chain[-1]:
+                current_timestamp = parser.parse(self.chain[-1]['timestamp'])
+
             response   = requests.get(f'http://{node}/get_chain')
 
             if response.status_code == 200:
@@ -104,16 +105,14 @@ class Blockchain:
                     continue
 
                 if length > max_length:
-                    max_length    = length
-                    updated_chain = chain
+                    max_length  = length
+                    self.chain  = chain
+                    updated     = True
                 elif length == max_length and current_timestamp > node_timestamp:
-                    updated_chain = chain
+                    self.chain  = chain
+                    updated     = True
 
-        if updated_chain:
-            self.chain = updated_chain
-            return True
-        
-        return False
+        return updated
 
     def proof_of_work(self, residents_file_path, hospitals_file_path):
 

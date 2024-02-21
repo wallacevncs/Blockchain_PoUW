@@ -4,7 +4,7 @@ import boto3
 import json
 from flask import Flask, jsonify, request
 from blockchain import Blockchain
-from s3Manager import S3Manager
+from storageManager import StorageManager
 
 def load_config(settings_path):
     with open(settings_path) as arquivo:
@@ -20,10 +20,10 @@ app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 s3_client   = boto3.client(service_name='s3')
-s3Manager   = S3Manager(s3_client , settings['bucket'])
+s3Manager   = StorageManager(s3_client , settings['bucket'])
 blockchain  = Blockchain(s3Manager)
 
-port        = int(os.getenv("PORT", 5000))
+port        = int(os.getenv("PORT", 5003))
 
 @app.route('/mine_block', methods=['GET'])
 def mine_block():

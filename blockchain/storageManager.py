@@ -1,7 +1,7 @@
 import re
 from collections import OrderedDict
 
-class S3Manager:
+class StorageManager:
 
     def __init__(self, s3_client, bucket_name):
         self.s3_client    = s3_client
